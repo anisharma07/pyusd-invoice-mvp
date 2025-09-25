@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sepolia Network Setup Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .button.warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        .button.success {
+            background: #28a745;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+        .alert.warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .alert.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .alert.danger {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Sepolia Network Setup Helper</h1>
+    
+    <div class="card">
+        <h2>📱 For MetaMask Mobile Users</h2>
+        <div class="alert warning">
+            <strong>⚠️ If you're getting "Network not found" error when scanning QR codes:</strong><br>
+            This helper will automatically add the Sepolia testnet to your MetaMask wallet.
+        </div>
+        
+        <h3>Quick Setup:</h3>
+        <button class="button success" onclick="setupSepolia()">🚀 Setup Sepolia Network</button>
+        <button class="button" onclick="addPYUSDToken()">💰 Add PYUSD Token</button>
+        <button class="button warning" onclick="checkNetwork()">🔍 Check Current Network</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <div class="card">
+        <h2>📋 Manual Setup Instructions</h2>
+        <p>If automatic setup doesn't work, you can add the network manually:</p>
+        
+        <h3>Sepolia Testnet Details:</h3>
+        <pre>
+Network Name: Sepolia Testnet
+Chain ID: 11155111
+Currency Symbol: ETH
+RPC URL: https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161
+Block Explorer: https://sepolia.etherscan.io
+        </pre>
+
+        <h3>PYUSD Token Details:</h3>
+        <pre>
+Token Address: 0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9
+Symbol: PYUSD
+Decimals: 6
+        </pre>
+    </div>
+
+    <div class="card">
+        <h2>🧪 Test QR Code Generation</h2>
+        <button class="button" onclick="testQRGeneration()">Generate Test QR Code</button>
+        <div id="qrResult"></div>
+    </div>
+
+    <script>
+        const SEPOLIA_CONFIG = {
+            chainId: '0xaa36a7', // 11155111 in hex
+            chainName: 'Sepolia Testnet',
+            nativeCurrency: {
+                name: 'ETH',
+                symbol: 'ETH',
+                decimals: 18,
+            },
+            rpcUrls: ['https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'],
+            blockExplorerUrls: ['https://sepolia.etherscan.io'],
+        };
+
+        const PYUSD_TOKEN = {
+            address: '0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9',
+            symbol: 'PYUSD',
+            decimals: 6,
+            image: 'https://assets.coingecko.com/coins/images/31212/small/PYUSD_Logo_%282%29.png',
+        };
+
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="alert ${type}">${message}</div>`;
+        }
+
+        async function setupSepolia() {
+            try {
+                if (!window.ethereum) {
+                    throw new Error('MetaMask is not installed');
+                }
+
+                showStatus('🔄 Setting up Sepolia network...', 'warning');
+
+                // Try to switch first
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: SEPOLIA_CONFIG.chainId }],
+                    });
+                    showStatus('✅ Switched to Sepolia network successfully!');
+                } catch (switchError) {
+                    // If network doesn't exist (error 4902), add it
+                    if (switchError.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [SEPOLIA_CONFIG],
+                        });
+                        showStatus('✅ Sepolia network added and activated successfully!');
+                    } else {
+                        throw switchError;
+                    }
+                }
+            } catch (error) {
+                console.error('Setup failed:', error);
+                showStatus(`❌ Setup failed: ${error.message}`, 'danger');
+            }
+        }
+
+        async function addPYUSDToken() {
+            try {
+                if (!window.ethereum) {
+                    throw new Error('MetaMask is not installed');
+                }
+
+                showStatus('🪙 Adding PYUSD token...', 'warning');
+
+                await window.ethereum.request({
+                    method: 'wallet_watchAsset',
+                    params: {
+                        type: 'ERC20',
+                        options: PYUSD_TOKEN,
+                    },
+                });
+
+                showStatus('✅ PYUSD token added to MetaMask!');
+            } catch (error) {
+                console.error('Token add failed:', error);
+                showStatus(`❌ Failed to add token: ${error.message}`, 'danger');
+            }
+        }
+
+        async function checkNetwork() {
+            try {
+                if (!window.ethereum) {
+                    throw new Error('MetaMask is not installed');
+                }
+
+                const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+                const chainIdNumber = parseInt(chainId, 16);
+                
+                let networkName = 'Unknown';
+                if (chainIdNumber === 11155111) {
+                    networkName = 'Sepolia Testnet ✅';
+                } else if (chainIdNumber === 1) {
+                    networkName = 'Ethereum Mainnet';
+                } else if (chainIdNumber === 137) {
+                    networkName = 'Polygon';
+                }
+
+                showStatus(`🌐 Current Network: ${networkName} (Chain ID: ${chainIdNumber})`);
+            } catch (error) {
+                console.error('Network check failed:', error);
+                showStatus(`❌ Network check failed: ${error.message}`, 'danger');
+            }
+        }
+
+        async function testQRGeneration() {
+            const qrResultDiv = document.getElementById('qrResult');
+            
+            try {
+                // Generate a test EIP-681 URI
+                const tokenAddress = PYUSD_TOKEN.address;
+                const contractAddress = '0x3BEa30431539669E94B2E79149654586F7746A16';
+                const amount = '100500000'; // 100.50 PYUSD (6 decimals)
+                const chainId = '11155111';
+                
+                const uri = `ethereum:${tokenAddress}@${chainId}/transfer?address=${contractAddress}&uint256=${amount}&gas=100000`;
+                
+                qrResultDiv.innerHTML = `
+                    <div class="alert success">
+                        <h4>✅ Test QR Code Generated</h4>
+                        <p><strong>URI:</strong></p>
+                        <pre>${uri}</pre>
+                        <p><strong>This QR code represents:</strong></p>
+                        <ul>
+                            <li>Transfer 100.50 PYUSD tokens</li>
+                            <li>To contract: ${contractAddress}</li>
+                            <li>On Sepolia network</li>
+                        </ul>
+                        <p><em>📱 Scan this with MetaMask mobile after setting up Sepolia network!</em></p>
+                    </div>
+                `;
+            } catch (error) {
+                qrResultDiv.innerHTML = `<div class="alert danger">❌ Failed to generate test QR: ${error.message}</div>`;
+            }
+        }
+
+        // Auto-check network on page load
+        window.addEventListener('load', () => {
+            if (window.ethereum) {
+                checkNetwork();
+            } else {
+                showStatus('⚠️ MetaMask is not installed. Please install MetaMask to use this helper.', 'warning');
+            }
+        });
+    </script>
+</body>
+</html>
