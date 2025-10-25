@@ -110,6 +110,7 @@ const Invoice: React.FC = () => {
     const [successTxHash, setSuccessTxHash] = useState<string>("");
     const [mongoPayment, setMongoPayment] = useState<InvoicePayment | null>(null);
     const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+    const [payNowQrCodeUrl, setPayNowQrCodeUrl] = useState<string>("");
 
     // Read invoice from contract
     const { data: contractInvoiceData, isError: invoiceReadError, isLoading: invoiceReadLoading, refetch: refetchInvoice } = useReadContract({
@@ -385,6 +386,40 @@ const Invoice: React.FC = () => {
         };
 
         loadPaymentFromFirebase();
+    }, [invoiceId, invoiceData]);
+
+    // Generate "Pay Now" QR code for unpaid invoices
+    useEffect(() => {
+        const generatePayNowQr = async () => {
+            if (!invoiceId || !invoiceData) return;
+
+            // Only generate QR if invoice is unpaid
+            if (invoiceData.paid) {
+                setPayNowQrCodeUrl('');
+                return;
+            }
+
+            try {
+                // Get current page URL
+                const currentUrl = window.location.origin + `/app/invoice/${invoiceId}`;
+                console.log('Generating Pay Now QR code for URL:', currentUrl);
+
+                // Generate QR code for the current invoice page
+                const qrDataUrl = await QRCode.toDataURL(currentUrl, {
+                    width: 300,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#FFFFFF',
+                    },
+                });
+                setPayNowQrCodeUrl(qrDataUrl);
+            } catch (error) {
+                console.error('Error generating Pay Now QR code:', error);
+            }
+        };
+
+        generatePayNowQr();
     }, [invoiceId, invoiceData]);
 
 
@@ -892,6 +927,30 @@ const Invoice: React.FC = () => {
                                             />
                                             <p style={{ margin: "0", fontSize: "12px", color: "var(--ion-color-medium)" }}>
                                                 Scan to view transaction on Etherscan
+                                            </p>
+                                        </div>
+                                    )}
+                                    {payNowQrCodeUrl && !invoiceData.paid && (
+                                        <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", marginTop: "16px", gap: "8px" }}>
+                                            <strong style={{ color: "var(--ion-color-warning)", fontSize: "16px" }}>Pay Now QR Code:</strong>
+                                            <img
+                                                src={payNowQrCodeUrl}
+                                                alt="Pay Now QR Code"
+                                                style={{
+                                                    width: "250px",
+                                                    height: "250px",
+                                                    border: "3px solid var(--ion-color-warning)",
+                                                    borderRadius: "12px",
+                                                    padding: "12px",
+                                                    backgroundColor: "white",
+                                                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)"
+                                                }}
+                                            />
+                                            <p style={{ margin: "0", fontSize: "13px", color: "var(--ion-color-dark)", fontWeight: "500", textAlign: "center" }}>
+                                                Scan to open this invoice and pay
+                                            </p>
+                                            <p style={{ margin: "0", fontSize: "11px", color: "var(--ion-color-medium)", textAlign: "center", maxWidth: "300px" }}>
+                                                Share this QR code with the payer to allow them to access and pay this invoice
                                             </p>
                                         </div>
                                     )}
