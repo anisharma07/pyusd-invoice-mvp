@@ -112,12 +112,6 @@ export const invoiceManager = [
             },
             {
                 "indexed": false,
-                "internalType": "bytes32",
-                "name": "paymentTxHash",
-                "type": "bytes32"
-            },
-            {
-                "indexed": false,
                 "internalType": "uint256",
                 "name": "timestamp",
                 "type": "uint256"
@@ -158,12 +152,6 @@ export const invoiceManager = [
                 "internalType": "uint256",
                 "name": "platformFee",
                 "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "bytes32",
-                "name": "paymentTxHash",
-                "type": "bytes32"
             },
             {
                 "indexed": false,
@@ -402,9 +390,75 @@ export const invoiceManager = [
                         "type": "uint256"
                     },
                     {
-                        "internalType": "bytes32",
-                        "name": "paymentTxHash",
-                        "type": "bytes32"
+                        "internalType": "bool",
+                        "name": "exists",
+                        "type": "bool"
+                    }
+                ],
+                "internalType": "struct InvoiceManager.Invoice",
+                "name": "",
+                "type": "tuple"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "_invoiceId",
+                "type": "uint256"
+            }
+        ],
+        "name": "getInvoiceSafe",
+        "outputs": [
+            {
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "id",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "address payable",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "amount",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "paid",
+                        "type": "bool"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "invoiceIpfsHash",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "enum InvoiceManager.InvoiceStatus",
+                        "name": "status",
+                        "type": "uint8"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "createdAt",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "paidAt",
+                        "type": "uint256"
                     },
                     {
                         "internalType": "bool",
@@ -415,6 +469,11 @@ export const invoiceManager = [
                 "internalType": "struct InvoiceManager.Invoice",
                 "name": "",
                 "type": "tuple"
+            },
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
             }
         ],
         "stateMutability": "view",
@@ -495,11 +554,6 @@ export const invoiceManager = [
                         "internalType": "uint256",
                         "name": "paidAt",
                         "type": "uint256"
-                    },
-                    {
-                        "internalType": "bytes32",
-                        "name": "paymentTxHash",
-                        "type": "bytes32"
                     },
                     {
                         "internalType": "bool",
@@ -643,11 +697,6 @@ export const invoiceManager = [
                 "internalType": "uint256",
                 "name": "paidAt",
                 "type": "uint256"
-            },
-            {
-                "internalType": "bytes32",
-                "name": "paymentTxHash",
-                "type": "bytes32"
             },
             {
                 "internalType": "bool",

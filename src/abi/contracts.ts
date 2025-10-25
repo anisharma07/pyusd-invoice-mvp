@@ -1,5 +1,5 @@
 // Contract Addresses on Sepolia Testnet
-export const INVOICE_MANAGER_ADDRESS = "0xE1D6BFe21AD6e58Bd9aeFd5C4D23600F794F450C" as const;
+export const INVOICE_MANAGER_ADDRESS = "0x1Ffa031c61B5b878D05a68D8A96B33e328364994" as const;
 export const PYUSD_TOKEN_ADDRESS = "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9" as const;
 
 // PYUSD Token ABI (ERC20 Standard)
