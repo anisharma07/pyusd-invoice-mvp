@@ -33,7 +33,6 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
         InvoiceStatus status;
         uint256 createdAt;
         uint256 paidAt;
-        bytes32 paymentTxHash; // Transaction hash of the payment
         bool exists;
     }
 
@@ -63,7 +62,6 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
         uint256 totalAmount,
         uint256 platformFee,
         uint256 issuerAmount,
-        bytes32 paymentTxHash,
         uint256 timestamp
     );
 
@@ -84,7 +82,6 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
         address indexed customer,
         uint256 totalAmount,
         uint256 platformFee,
-        bytes32 paymentTxHash,
         uint256 timestamp
     );
 
@@ -190,7 +187,6 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
             status: InvoiceStatus.UNPAID,
             createdAt: block.timestamp,
             paidAt: 0,
-            paymentTxHash: bytes32(0),
             exists: true
         });
 
@@ -254,15 +250,11 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
         );
         require(issuerSuccess, "Issuer payment transfer failed");
 
-        // Store transaction hash (using blockhash as a pseudo-hash for tracking)
-        bytes32 txHash = blockhash(block.number - 1);
-
         // Update invoice
         invoice.status = InvoiceStatus.PAID;
         invoice.paid = true;
         invoice.to = msg.sender;
         invoice.paidAt = block.timestamp;
-        invoice.paymentTxHash = txHash;
 
         // Create payer account if doesn't exist
         if (!userAccounts[msg.sender].exists) {
@@ -284,7 +276,6 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
             invoice.amount,
             platformFee,
             issuerAmount,
-            txHash,
             block.timestamp
         );
     }
@@ -332,15 +323,11 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
             require(feeSuccess, "Platform fee transfer failed");
         }
 
-        // Store transaction hash (using blockhash as a pseudo-hash for tracking)
-        bytes32 txHash = blockhash(block.number - 1);
-
         // Update invoice
         invoice.status = InvoiceStatus.PAID;
         invoice.paid = true;
         invoice.to = _customerAddress; // Use provided customer address or 0x0 if not provided
         invoice.paidAt = block.timestamp;
-        invoice.paymentTxHash = txHash;
 
         // If customer address is provided and account doesn't exist, create it
         if (
@@ -366,7 +353,6 @@ contract InvoiceManager is ReentrancyGuard, Ownable {
             _customerAddress,
             invoice.amount,
             platformFee,
-            txHash,
             block.timestamp
         );
     }
