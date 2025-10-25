@@ -44,7 +44,6 @@ import {
   logoBuffer,
   pencilOutline,
   colorPaletteOutline,
-  walletOutline,
 } from "ionicons/icons";
 import * as AppGeneral from "../socialcalc/index.js";
 import { File } from "../Storage/LocalStorage.js";
@@ -65,7 +64,6 @@ interface FileOptionsProps {
   showColorModal: boolean;
   setShowColorPicker: (show: boolean) => void;
   onSave?: () => Promise<void>;
-  onBlockchainSave?: () => Promise<void>;
   isAutoSaveEnabled?: boolean;
   fileName: string;
 }
@@ -76,7 +74,6 @@ const FileOptions: React.FC<FileOptionsProps> = ({
   showColorModal,
   setShowColorPicker,
   onSave,
-  onBlockchainSave,
   isAutoSaveEnabled = false,
   fileName,
 }) => {
@@ -486,16 +483,6 @@ const FileOptions: React.FC<FileOptionsProps> = ({
               <IonIcon icon={documentOutline} slot="start" />
               <IonLabel>Save As</IonLabel>
             </IonItem>
-
-            {onBlockchainSave && (
-              <IonItem button onClick={() => {
-                setShowActionsPopover(false);
-                onBlockchainSave();
-              }}>
-                <IonIcon icon={walletOutline} slot="start" />
-                <IonLabel>Save to Blockchain</IonLabel>
-              </IonItem>
-            )}
 
             <IonItem button onClick={handleUndo}>
               <IonIcon icon={arrowUndo} slot="start" />

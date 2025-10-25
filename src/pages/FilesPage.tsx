@@ -14,6 +14,13 @@ import {
   IonSegment,
   IonSegmentButton,
   IonText,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonSpinner,
+  IonBadge,
+  IonLabel,
 } from "@ionic/react";
 import {
   chevronForward,
@@ -27,12 +34,17 @@ import {
   filterOutline,
   moon,
   sunny,
+  documentText,
+  checkmarkCircle,
+  timeOutline,
+  cashOutline,
+  receiptOutline,
   walletOutline,
+  openOutline,
 } from "ionicons/icons";
 import Files from "../components/Files/Files";
 import { useTheme } from "../contexts/ThemeContext";
 import { useInvoice } from "../contexts/InvoiceContext";
-import { useWallet } from "../contexts/blockchain/WalletContext";
 import { DATA } from "../templates";
 import { tempMeta } from "../templates-meta";
 import * as AppGeneral from "../components/socialcalc/index";
@@ -40,15 +52,15 @@ import "./FilesPage.css";
 import { useHistory } from "react-router-dom";
 import { File } from "../components/Storage/LocalStorage";
 import TemplateModal from "../components/TemplateModal/TemplateModal";
-import WalletConnection from '../components/blockchain/WalletConnection';
-// import BlockchainInvoiceForm from '../components/blockchain/BlockchainInvoiceForm';
-import BlockchainInvoicesList from '../components/blockchain/BlockchainInvoicesList';
-
+import { useAccount, useReadContract } from 'wagmi';
+import { invoiceManager } from '../abi/invoiceManage';
+import { INVOICE_MANAGER_ADDRESS } from '../abi/contracts';
+import { formatUnits } from 'viem';
+import WalletConnect from '../components/WalletConnect';
 const FilesPage: React.FC = () => {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const { selectedFile, store, updateSelectedFile, updateBillType } =
     useInvoice();
-  const { isConnected } = useWallet();
   const history = useHistory();
 
   const [showToast, setShowToast] = useState(false);
@@ -56,7 +68,6 @@ const FilesPage: React.FC = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showSharedTemplateModal, setShowSharedTemplateModal] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'files' | 'blockchain'>('files');
 
   // Legacy states for old template modal (will be removed later)
   const [templateFilter, setTemplateFilter] = useState<
@@ -69,6 +80,144 @@ const FilesPage: React.FC = () => {
   const [newFileName, setNewFileName] = useState("");
 
   const [device] = useState(AppGeneral.getDeviceType());
+
+  // Main tab state - 'files' or 'blockchain'
+  const [activeTab, setActiveTab] = useState<'files' | 'blockchain'>('files');
+
+  // Blockchain states
+  const { address, isConnected } = useAccount();
+  const [createdInvoices, setCreatedInvoices] = useState<any[]>([]);
+  const [paidInvoices, setPaidInvoices] = useState<any[]>([]);
+  const [isLoadingInvoices, setIsLoadingInvoices] = useState(false);
+
+  // Read user's created invoices
+  const { data: createdInvoiceIds, refetch: refetchCreated } = useReadContract({
+    address: INVOICE_MANAGER_ADDRESS,
+    abi: invoiceManager,
+    functionName: 'getUserCreatedBills',
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+    }
+  });
+
+  // Read user's paid invoices
+  const { data: paidInvoiceIds, refetch: refetchPaid } = useReadContract({
+    address: INVOICE_MANAGER_ADDRESS,
+    abi: invoiceManager,
+    functionName: 'getUserPaidBills',
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && isConnected,
+    }
+  });
+
+  // Fetch invoice details using getInvoicesBatch
+  const { data: createdInvoicesData, refetch: refetchCreatedData } = useReadContract({
+    address: INVOICE_MANAGER_ADDRESS,
+    abi: invoiceManager,
+    functionName: 'getInvoicesBatch',
+    args: createdInvoiceIds && Array.isArray(createdInvoiceIds) && createdInvoiceIds.length > 0 ? [createdInvoiceIds] : undefined,
+    query: {
+      enabled: !!address && isConnected && !!createdInvoiceIds && Array.isArray(createdInvoiceIds) && createdInvoiceIds.length > 0,
+    }
+  });
+
+  const { data: paidInvoicesData, refetch: refetchPaidData } = useReadContract({
+    address: INVOICE_MANAGER_ADDRESS,
+    abi: invoiceManager,
+    functionName: 'getInvoicesBatch',
+    args: paidInvoiceIds && Array.isArray(paidInvoiceIds) && paidInvoiceIds.length > 0 ? [paidInvoiceIds] : undefined,
+    query: {
+      enabled: !!address && isConnected && !!paidInvoiceIds && Array.isArray(paidInvoiceIds) && paidInvoiceIds.length > 0,
+    }
+  });
+
+  // Fetch invoice details when IDs are loaded
+  useEffect(() => {
+    const processInvoiceData = () => {
+      if (!address || !isConnected) {
+        setCreatedInvoices([]);
+        setPaidInvoices([]);
+        setIsLoadingInvoices(false);
+        return;
+      }
+
+      setIsLoadingInvoices(true);
+
+      try {
+        // Process created invoices
+        if (createdInvoicesData && Array.isArray(createdInvoicesData)) {
+          const created = createdInvoicesData
+            .filter((inv: any) => {
+              // Check exists field OR valid data (fallback)
+              const hasValidData = inv.id &&
+                inv.invoiceIpfsHash &&
+                inv.invoiceIpfsHash !== "" &&
+                inv.from &&
+                inv.from !== "0x0000000000000000000000000000000000000000";
+              return inv.exists || hasValidData;
+            })
+            .map((inv: any) => ({
+              id: inv.id.toString(),
+              amount: inv.amount,
+              paid: inv.paid,
+              from: inv.from,
+              to: inv.to,
+              createdAt: inv.createdAt,
+              paidAt: inv.paidAt,
+              paymentTxHash: inv.paymentTxHash,
+              type: 'created'
+            }));
+          setCreatedInvoices(created);
+        } else {
+          setCreatedInvoices([]);
+        }
+
+        // Process paid invoices
+        if (paidInvoicesData && Array.isArray(paidInvoicesData)) {
+          const paid = paidInvoicesData
+            .filter((inv: any) => {
+              // Check exists field OR valid data (fallback)
+              const hasValidData = inv.id &&
+                inv.invoiceIpfsHash &&
+                inv.invoiceIpfsHash !== "" &&
+                inv.from &&
+                inv.from !== "0x0000000000000000000000000000000000000000";
+              return inv.exists || hasValidData;
+            })
+            .map((inv: any) => ({
+              id: inv.id.toString(),
+              amount: inv.amount,
+              paid: inv.paid,
+              from: inv.from,
+              to: inv.to,
+              createdAt: inv.createdAt,
+              paidAt: inv.paidAt,
+              paymentTxHash: inv.paymentTxHash,
+              type: 'paid'
+            }));
+          setPaidInvoices(paid);
+        } else {
+          setPaidInvoices([]);
+        }
+      } catch (error) {
+        console.error('Error processing invoice data:', error);
+      } finally {
+        setIsLoadingInvoices(false);
+      }
+    };
+
+    processInvoiceData();
+  }, [createdInvoicesData, paidInvoicesData, address, isConnected]);  // Refetch invoices when tab changes to blockchain
+  useEffect(() => {
+    if (activeTab === 'blockchain' && isConnected && address) {
+      refetchCreated();
+      refetchPaid();
+      refetchCreatedData();
+      refetchPaidData();
+    }
+  }, [activeTab, isConnected, address]);
 
   // Check screen size
   useEffect(() => {
@@ -300,11 +449,10 @@ const FilesPage: React.FC = () => {
               background: isDarkMode
                 ? "var(--ion-color-step-50)"
                 : "var(--ion-color-step-50)",
-              borderBottom: `1px solid ${
-                isDarkMode
-                  ? "var(--ion-color-step-200)"
-                  : "var(--ion-color-step-150)"
-              }`,
+              borderBottom: `1px solid ${isDarkMode
+                ? "var(--ion-color-step-200)"
+                : "var(--ion-color-step-150)"
+                }`,
               margin: "0",
             }}
           >
@@ -321,11 +469,10 @@ const FilesPage: React.FC = () => {
                   : "var(--ion-background-color)",
                 borderRadius: "8px",
                 padding: "3px",
-                border: `1px solid ${
-                  isDarkMode
-                    ? "var(--ion-color-step-250)"
-                    : "var(--ion-color-step-150)"
-                }`,
+                border: `1px solid ${isDarkMode
+                  ? "var(--ion-color-step-250)"
+                  : "var(--ion-color-step-150)"
+                  }`,
                 boxShadow: "none",
                 "--background": isDarkMode
                   ? "var(--ion-color-step-150)"
@@ -359,8 +506,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "all"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 />
                 <IonText
@@ -373,8 +520,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "all"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 >
                   All (
@@ -406,8 +553,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "web"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 />
                 <IonText
@@ -420,8 +567,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "web"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 >
                   Web ({categorized.web.length})
@@ -449,8 +596,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "mobile"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 />
                 <IonText
@@ -463,8 +610,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "mobile"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 >
                   Mobile ({categorized.mobile.length})
@@ -492,8 +639,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "tablet"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 />
                 <IonText
@@ -506,8 +653,8 @@ const FilesPage: React.FC = () => {
                       templateFilter === "tablet"
                         ? "#ffffff"
                         : isDarkMode
-                        ? "#ffffff"
-                        : "#000000",
+                          ? "#ffffff"
+                          : "#000000",
                   }}
                 >
                   Tablet ({categorized.tablet.length})
@@ -569,11 +716,10 @@ const FilesPage: React.FC = () => {
                               ? "var(--ion-color-step-600)"
                               : "var(--ion-color-step-500)",
                             padding: "8px 0",
-                            borderBottom: `1px solid ${
-                              isDarkMode
-                                ? "var(--ion-color-step-150)"
-                                : "var(--ion-color-step-100)"
-                            }`,
+                            borderBottom: `1px solid ${isDarkMode
+                              ? "var(--ion-color-step-150)"
+                              : "var(--ion-color-step-100)"
+                              }`,
                             marginBottom: "16px",
                           }}
                         >
@@ -588,8 +734,8 @@ const FilesPage: React.FC = () => {
                         )}
                         {(categorized.mobile.length > 0 ||
                           categorized.tablet.length > 0) && (
-                          <div style={{ margin: "24px 0" }} />
-                        )}
+                            <div style={{ margin: "24px 0" }} />
+                          )}
                       </>
                     )}
 
@@ -607,11 +753,10 @@ const FilesPage: React.FC = () => {
                               ? "var(--ion-color-step-600)"
                               : "var(--ion-color-step-500)",
                             padding: "8px 0",
-                            borderBottom: `1px solid ${
-                              isDarkMode
-                                ? "var(--ion-color-step-150)"
-                                : "var(--ion-color-step-100)"
-                            }`,
+                            borderBottom: `1px solid ${isDarkMode
+                              ? "var(--ion-color-step-150)"
+                              : "var(--ion-color-step-100)"
+                              }`,
                             marginBottom: "16px",
                           }}
                         >
@@ -644,11 +789,10 @@ const FilesPage: React.FC = () => {
                               ? "var(--ion-color-step-600)"
                               : "var(--ion-color-step-500)",
                             padding: "8px 0",
-                            borderBottom: `1px solid ${
-                              isDarkMode
-                                ? "var(--ion-color-step-150)"
-                                : "var(--ion-color-step-100)"
-                            }`,
+                            borderBottom: `1px solid ${isDarkMode
+                              ? "var(--ion-color-step-150)"
+                              : "var(--ion-color-step-100)"
+                              }`,
                             marginBottom: "16px",
                           }}
                         >
@@ -705,11 +849,10 @@ const FilesPage: React.FC = () => {
         }
         onClick={() => setShowSharedTemplateModal(true)}
         style={{
-          border: `1px solid ${
-            isDarkMode
-              ? "var(--ion-color-step-200)"
-              : "var(--ion-color-step-150)"
-          }`,
+          border: `1px solid ${isDarkMode
+            ? "var(--ion-color-step-200)"
+            : "var(--ion-color-step-150)"
+            }`,
           borderRadius: "8px",
           padding: "12px",
           marginBottom: "12px",
@@ -753,11 +896,10 @@ const FilesPage: React.FC = () => {
             alignItems: "center",
             justifyContent: "center",
             flexShrink: 0,
-            border: `1px solid ${
-              isDarkMode
-                ? "var(--ion-color-step-200)"
-                : "var(--ion-color-step-150)"
-            }`,
+            border: `1px solid ${isDarkMode
+              ? "var(--ion-color-step-200)"
+              : "var(--ion-color-step-150)"
+              }`,
           }}
         >
           {metadata?.ImageUri ? (
@@ -825,11 +967,10 @@ const FilesPage: React.FC = () => {
               color: isDarkMode
                 ? "var(--ion-color-step-600)"
                 : "var(--ion-color-step-500)",
-              border: `1px solid ${
-                isDarkMode
-                  ? "var(--ion-color-step-200)"
-                  : "var(--ion-color-step-150)"
-              }`,
+              border: `1px solid ${isDarkMode
+                ? "var(--ion-color-step-200)"
+                : "var(--ion-color-step-150)"
+                }`,
               textTransform: "uppercase",
             }}
           >
@@ -875,6 +1016,11 @@ const FilesPage: React.FC = () => {
             Invoice App
           </IonTitle>
           <IonButtons slot="end">
+            {activeTab === 'blockchain' && (
+              <div style={{ marginRight: "8px" }}>
+                <WalletConnect />
+              </div>
+            )}
             <IonButton
               fill="clear"
               onClick={toggleDarkMode}
@@ -893,49 +1039,17 @@ const FilesPage: React.FC = () => {
         </IonToolbar>
       </IonHeader>
       <IonContent fullscreen>
-        {/* Tab Selector */}
-        <div style={{ 
-          padding: '16px', 
-          background: isDarkMode ? 'var(--ion-color-step-50)' : 'var(--ion-color-step-25)',
-          borderBottom: `1px solid ${isDarkMode ? 'var(--ion-color-step-200)' : 'var(--ion-color-step-150)'}` 
-        }}>
-          <IonSegment
-            value={activeTab}
-            onIonChange={(e) => setActiveTab(e.detail.value as 'files' | 'blockchain')}
-            style={{
-              maxWidth: '400px',
-              margin: '0 auto'
-            }}
-          >
-            <IonSegmentButton value="files">
-              <IonIcon icon={layers} />
-              <IonText style={{ marginLeft: '8px' }}>Files</IonText>
-            </IonSegmentButton>
-            <IonSegmentButton value="blockchain">
-              <IonIcon icon={walletOutline} />
-              <IonText style={{ marginLeft: '8px' }}>
-                Blockchain
-                {isConnected && <span style={{ color: 'var(--ion-color-success)' }}> ●</span>}
-              </IonText>
-            </IonSegmentButton>
-          </IonSegment>
-        </div>
-
-        {/* Files Tab Content */}
-        {activeTab === 'files' && (
-          <>
-            {/* Template Creation Section */}
+        {/* Template Creation Section */}
         <div
           style={{
             padding: isSmallScreen ? "16px 16px 0 16px" : "16px",
             background: isDarkMode
               ? "var(--ion-color-step-50)"
               : "var(--ion-color-step-25)",
-            borderBottom: `1px solid ${
-              isDarkMode
-                ? "var(--ion-color-step-200)"
-                : "var(--ion-color-step-150)"
-            }`,
+            borderBottom: `1px solid ${isDarkMode
+              ? "var(--ion-color-step-200)"
+              : "var(--ion-color-step-150)"
+              }`,
             marginBottom: "8px",
           }}
         >
@@ -1195,11 +1309,10 @@ const FilesPage: React.FC = () => {
                       style={{
                         minWidth: "110px",
                         width: "110px",
-                        border: `1px solid ${
-                          isDarkMode
-                            ? "var(--ion-color-step-200)"
-                            : "var(--ion-color-step-150)"
-                        }`,
+                        border: `1px solid ${isDarkMode
+                          ? "var(--ion-color-step-200)"
+                          : "var(--ion-color-step-150)"
+                          }`,
                         borderRadius: "8px",
                         padding: "12px",
                         cursor: "pointer",
@@ -1228,11 +1341,10 @@ const FilesPage: React.FC = () => {
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          border: `1px solid ${
-                            isDarkMode
-                              ? "var(--ion-color-step-200)"
-                              : "var(--ion-color-step-150)"
-                          }`,
+                          border: `1px solid ${isDarkMode
+                            ? "var(--ion-color-step-200)"
+                            : "var(--ion-color-step-150)"
+                            }`,
                         }}
                       >
                         {metadata?.ImageUri ? (
@@ -1287,11 +1399,10 @@ const FilesPage: React.FC = () => {
                 style={{
                   minWidth: "110px",
                   width: "110px",
-                  border: `2px dashed ${
-                    isDarkMode
-                      ? "var(--ion-color-step-300)"
-                      : "var(--ion-color-step-200)"
-                  }`,
+                  border: `2px dashed ${isDarkMode
+                    ? "var(--ion-color-step-300)"
+                    : "var(--ion-color-step-200)"
+                    }`,
                   borderRadius: "8px",
                   padding: "12px",
                   cursor: "pointer",
@@ -1349,42 +1460,414 @@ const FilesPage: React.FC = () => {
           )}
         </div>
 
-            <Files
-              store={store}
-              file={selectedFile}
-              updateSelectedFile={updateSelectedFile}
-              updateBillType={updateBillType}
-            />
-          </>
+        {/* Tab Segment */}
+        <div
+          style={{
+            padding: "16px 16px 0 16px",
+            background: isDarkMode
+              ? "var(--ion-color-step-50)"
+              : "var(--ion-background-color)",
+          }}
+        >
+          <IonSegment
+            value={activeTab}
+            onIonChange={(e) => setActiveTab(e.detail.value as 'files' | 'blockchain')}
+            style={{
+              background: isDarkMode
+                ? "var(--ion-color-step-150)"
+                : "var(--ion-color-step-50)",
+              borderRadius: "8px",
+              padding: "4px",
+              maxWidth: "400px",
+              margin: "0 auto",
+            }}
+          >
+            <IonSegmentButton value="files">
+              <IonLabel>
+                <IonIcon icon={documentText} style={{ marginRight: "8px" }} />
+                Local Files
+              </IonLabel>
+            </IonSegmentButton>
+            <IonSegmentButton value="blockchain">
+              <IonLabel>
+                <IonIcon icon={walletOutline} style={{ marginRight: "8px" }} />
+                Blockchain Invoices
+              </IonLabel>
+            </IonSegmentButton>
+          </IonSegment>
+        </div>
+
+        {/* Content based on active tab */}
+        {activeTab === 'files' && (
+          <Files
+            store={store}
+            file={selectedFile}
+            updateSelectedFile={updateSelectedFile}
+            updateBillType={updateBillType}
+          />
         )}
 
-        {/* Blockchain Tab Content */}
         {activeTab === 'blockchain' && (
-          <div>
-            <div style={{ padding: '16px', borderBottom: `1px solid ${isDarkMode ? 'var(--ion-color-step-200)' : 'var(--ion-color-step-150)'}` }}>
-              <WalletConnection 
-                onConnectionChange={(connected) => {
-                  if (connected) {
-                    setToastMessage('Wallet connected successfully!');
-                    setShowToast(true);
-                  }
-                }} 
-              />
-              
-              {/* {isConnected && (
-                <div style={{ marginTop: '20px' }}>
-                  <BlockchainInvoiceForm 
-                    onInvoiceCreated={(invoiceId, txHash) => {
-                      setToastMessage(`Invoice #${invoiceId} created! Tx: ${txHash.slice(0, 10)}...`);
-                      setShowToast(true);
-                    }}
-                  />
-                </div>
-              )} */}
-            </div>
-            
-            {/* Blockchain Invoices List */}
-            <BlockchainInvoicesList />
+          <div style={{ padding: "16px" }}>
+            {!isConnected ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "60px 20px",
+                  color: "var(--ion-color-medium)",
+                }}
+              >
+                <IonIcon
+                  icon={walletOutline}
+                  style={{
+                    fontSize: "64px",
+                    marginBottom: "16px",
+                    display: "block",
+                    opacity: 0.4,
+                    color: "var(--ion-color-medium)",
+                  }}
+                />
+                <h3
+                  style={{
+                    margin: "0 0 8px 0",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                    color: "var(--ion-color-medium)",
+                  }}
+                >
+                  Connect Your Wallet
+                </h3>
+                <p style={{ margin: "0 0 24px 0", fontSize: "14px", opacity: 0.8 }}>
+                  Connect your wallet to view your blockchain invoices
+                </p>
+                <WalletConnect />
+              </div>
+            ) : (
+              <>
+                {isLoadingInvoices ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px" }}>
+                    <IonSpinner name="crescent" />
+                    <p style={{ marginTop: "16px", color: "var(--ion-color-medium)" }}>
+                      Loading invoices...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Created Invoices Section */}
+                    <div style={{ marginBottom: "24px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          marginBottom: "12px",
+                          gap: "8px",
+                        }}
+                      >
+                        <IonIcon
+                          icon={receiptOutline}
+                          style={{
+                            fontSize: "20px",
+                            color: "var(--ion-color-primary)",
+                          }}
+                        />
+                        <h2
+                          style={{
+                            margin: "0",
+                            fontSize: "18px",
+                            fontWeight: "600",
+                            color: isDarkMode
+                              ? "var(--ion-color-step-750)"
+                              : "var(--ion-color-step-650)",
+                          }}
+                        >
+                          Created Invoices
+                        </h2>
+                        <IonBadge color="primary">{createdInvoices.length}</IonBadge>
+                      </div>
+
+                      {createdInvoices.length === 0 ? (
+                        <IonCard>
+                          <IonCardContent style={{ textAlign: "center", padding: "32px 20px" }}>
+                            <IonIcon
+                              icon={documentText}
+                              style={{
+                                fontSize: "48px",
+                                opacity: 0.3,
+                                color: "var(--ion-color-medium)",
+                              }}
+                            />
+                            <p
+                              style={{
+                                margin: "12px 0 0 0",
+                                color: "var(--ion-color-medium)",
+                                fontSize: "14px",
+                              }}
+                            >
+                              No invoices created yet
+                            </p>
+                          </IonCardContent>
+                        </IonCard>
+                      ) : (
+                        <div style={{ display: "grid", gap: "12px" }}>
+                          {createdInvoices.map((invoice) => (
+                            <IonCard
+                              key={invoice.id}
+                              button
+                              onClick={() => history.push(`/app/invoice/${invoice.id}`)}
+                              style={{
+                                margin: "0",
+                                cursor: "pointer",
+                                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                              }}
+                            >
+                              <IonCardContent>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                                    <div
+                                      style={{
+                                        width: "40px",
+                                        height: "40px",
+                                        borderRadius: "8px",
+                                        background: invoice.paid ? "var(--ion-color-success)" : "var(--ion-color-primary)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IonIcon
+                                        icon={invoice.paid ? checkmarkCircle : receiptOutline}
+                                        style={{ fontSize: "20px", color: "white" }}
+                                      />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <h3
+                                        style={{
+                                          margin: "0 0 4px 0",
+                                          fontSize: "16px",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        Invoice #{invoice.id}
+                                      </h3>
+                                      <p
+                                        style={{
+                                          margin: "0 0 4px 0",
+                                          fontSize: "13px",
+                                          color: "var(--ion-color-medium)",
+                                        }}
+                                      >
+                                        {formatUnits(invoice.amount, 6)} PYUSD
+                                      </p>
+                                      <p
+                                        style={{
+                                          margin: "0",
+                                          fontSize: "12px",
+                                          color: invoice.paid ? "var(--ion-color-success)" : "var(--ion-color-warning)",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        {invoice.paid ? "PAID" : "UNPAID"}
+                                        {invoice.paid && invoice.paymentTxHash && invoice.paymentTxHash !== "0x0000000000000000000000000000000000000000000000000000000000000000" && (
+                                          <a
+                                            href={`https://sepolia.etherscan.io/tx/${invoice.paymentTxHash}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                              marginLeft: "8px",
+                                              color: "var(--ion-color-primary)",
+                                              textDecoration: "none",
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "2px",
+                                            }}
+                                          >
+                                            <IonIcon icon={openOutline} style={{ fontSize: "14px" }} />
+                                          </a>
+                                        )}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <IonIcon
+                                    icon={chevronForward}
+                                    style={{
+                                      fontSize: "20px",
+                                      color: "var(--ion-color-medium)",
+                                    }}
+                                  />
+                                </div>
+                              </IonCardContent>
+                            </IonCard>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Paid Invoices Section */}
+                    <div style={{ marginBottom: "24px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          marginBottom: "12px",
+                          gap: "8px",
+                        }}
+                      >
+                        <IonIcon
+                          icon={checkmarkCircle}
+                          style={{
+                            fontSize: "20px",
+                            color: "var(--ion-color-success)",
+                          }}
+                        />
+                        <h2
+                          style={{
+                            margin: "0",
+                            fontSize: "18px",
+                            fontWeight: "600",
+                            color: isDarkMode
+                              ? "var(--ion-color-step-750)"
+                              : "var(--ion-color-step-650)",
+                          }}
+                        >
+                          Paid Invoices
+                        </h2>
+                        <IonBadge color="success">{paidInvoices.length}</IonBadge>
+                      </div>
+
+                      {paidInvoices.length === 0 ? (
+                        <IonCard>
+                          <IonCardContent style={{ textAlign: "center", padding: "32px 20px" }}>
+                            <IonIcon
+                              icon={cashOutline}
+                              style={{
+                                fontSize: "48px",
+                                opacity: 0.3,
+                                color: "var(--ion-color-medium)",
+                              }}
+                            />
+                            <p
+                              style={{
+                                margin: "12px 0 0 0",
+                                color: "var(--ion-color-medium)",
+                                fontSize: "14px",
+                              }}
+                            >
+                              No invoices paid yet
+                            </p>
+                          </IonCardContent>
+                        </IonCard>
+                      ) : (
+                        <div style={{ display: "grid", gap: "12px" }}>
+                          {paidInvoices.map((invoice) => (
+                            <IonCard
+                              key={invoice.id}
+                              button
+                              onClick={() => history.push(`/app/invoice/${invoice.id}`)}
+                              style={{
+                                margin: "0",
+                                cursor: "pointer",
+                                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                              }}
+                            >
+                              <IonCardContent>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                                    <div
+                                      style={{
+                                        width: "40px",
+                                        height: "40px",
+                                        borderRadius: "8px",
+                                        background: "var(--ion-color-success)",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <IonIcon
+                                        icon={checkmarkCircle}
+                                        style={{ fontSize: "20px", color: "white" }}
+                                      />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <h3
+                                        style={{
+                                          margin: "0 0 4px 0",
+                                          fontSize: "16px",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        Invoice #{invoice.id}
+                                      </h3>
+                                      <p
+                                        style={{
+                                          margin: "0 0 4px 0",
+                                          fontSize: "13px",
+                                          color: "var(--ion-color-medium)",
+                                        }}
+                                      >
+                                        {formatUnits(invoice.amount, 6)} PYUSD
+                                      </p>
+                                      <p
+                                        style={{
+                                          margin: "0",
+                                          fontSize: "12px",
+                                          color: "var(--ion-color-success)",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        PAID BY YOU
+                                        {invoice.paymentTxHash && invoice.paymentTxHash !== "0x0000000000000000000000000000000000000000000000000000000000000000" && (
+                                          <a
+                                            href={`https://sepolia.etherscan.io/tx/${invoice.paymentTxHash}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                              marginLeft: "8px",
+                                              color: "var(--ion-color-primary)",
+                                              textDecoration: "none",
+                                              display: "inline-flex",
+                                              alignItems: "center",
+                                              gap: "2px",
+                                            }}
+                                          >
+                                            <IonIcon icon={openOutline} style={{ fontSize: "14px" }} />
+                                          </a>
+                                        )}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <IonIcon
+                                    icon={chevronForward}
+                                    style={{
+                                      fontSize: "20px",
+                                      color: "var(--ion-color-medium)",
+                                    }}
+                                  />
+                                </div>
+                              </IonCardContent>
+                            </IonCard>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
 

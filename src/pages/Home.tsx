@@ -45,33 +45,23 @@ import {
   saveOutline,
   toggleOutline,
   saveSharp,
-  walletOutline,
 } from "ionicons/icons";
 import "./Home.css";
 import FileOptions from "../components/FileMenu/FileOptions";
 import Menu from "../components/Menu/Menu";
 import { useTheme } from "../contexts/ThemeContext";
 import { useInvoice } from "../contexts/InvoiceContext";
-import { useWallet } from "../contexts/blockchain/WalletContext";
-import { blockchainService } from "../services/blockchain/blockchain";
-import { ipfsService } from "../services/blockchain/ipfsService";
 import { useHistory, useLocation, useParams } from "react-router-dom";
 import DynamicInvoiceForm from "../components/DynamicInvoiceForm";
 import { isQuotaExceededError, getQuotaExceededMessage } from "../utils/helper";
 import { getAutoSaveEnabled } from "../utils/settings";
 import { SheetChangeMonitor } from "../utils/sheetChangeMonitor";
 import { backgroundClip } from "html2canvas/dist/types/css/property-descriptors/background-clip";
-import WalletSelector from "../components/wallet/WalletSelector";
+import WalletConnect from "../components/WalletConnect";
+import CreateInvoiceModal from "../components/CreateInvoiceModal";
 
 const Home: React.FC = () => {
   const { isDarkMode } = useTheme();
-  const { 
-    isConnected, 
-    address, 
-    connectWallet, 
-    disconnectWallet, 
-    isLoading: walletLoading 
-  } = useWallet();
   const {
     selectedFile,
     billType,
@@ -122,13 +112,9 @@ const Home: React.FC = () => {
 
   // Invoice form state
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
-  
-  // Blockchain invoice state
-  const [showBlockchainAmountPrompt, setShowBlockchainAmountPrompt] = useState(false);
-  const [blockchainInvoiceAmount, setBlockchainInvoiceAmount] = useState("");
-  
-  // Wallet selector state
-  const [showWalletSelector, setShowWalletSelector] = useState(false);
+
+  // Create invoice modal state
+  const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
 
   // Available colors for sheet themes
   const availableColors = [
@@ -404,136 +390,6 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleBlockchainSave = async () => {
-    console.log("🔗 handleBlockchainSave: Starting blockchain save");
-
-    if (!fileName) {
-      setToastMessage("No file selected to save to blockchain.");
-      setToastColor("warning");
-      setShowToast(true);
-      return;
-    }
-
-    if (!isConnected) {
-      setToastMessage("Please connect your wallet first.");
-      setToastColor("warning");
-      setShowToast(true);
-      return;
-    }
-
-    // Show amount prompt
-    setShowBlockchainAmountPrompt(true);
-  };
-
-  const executeBlockchainSave = async (amount: string) => {
-    try {
-      console.log("🔗 executeBlockchainSave: Starting with amount", amount);
-
-      // Check if SocialCalc is ready
-      const socialCalc = (window as any).SocialCalc;
-      if (!socialCalc || !socialCalc.GetCurrentWorkBookControl) {
-        setToastMessage("Spreadsheet not ready. Please wait and try again.");
-        setToastColor("warning");
-        setShowToast(true);
-        return;
-      }
-
-      const control = socialCalc.GetCurrentWorkBookControl();
-      if (!control || !control.workbook || !control.workbook.spreadsheet) {
-        setToastMessage("Spreadsheet not ready. Please wait and try again.");
-        setToastColor("warning");
-        setShowToast(true);
-        return;
-      }
-
-      if (!activeTemplateData) {
-        setToastMessage("No template data available for blockchain save.");
-        setToastColor("warning");
-        setShowToast(true);
-        return;
-      }
-
-      // Get spreadsheet content
-      const content = AppGeneral.getSpreadsheetContent();
-      
-      // Get existing file metadata
-      const data = await store._getFile(fileName);
-      
-      // Prepare invoice data for IPFS
-      const invoiceData = {
-        fileName: fileName,
-        content: content,
-        templateId: activeTemplateData.templateId,
-        billType: billType,
-        created: (data as any)?.created || new Date().toISOString(),
-        updated: new Date().toISOString(),
-        amount: parseFloat(amount),
-        creator: address,
-        metadata: {
-          template: activeTemplateData.template,
-          footers: activeTemplateData.footers,
-        }
-      };
-
-      console.log("📤 executeBlockchainSave: Uploading to IPFS", {
-        invoiceDataKeys: Object.keys(invoiceData),
-        amount: invoiceData.amount,
-      });
-
-      // Upload to IPFS
-      setToastMessage("Uploading invoice to IPFS...");
-      setToastColor("warning");
-      setShowToast(true);
-
-      const ipfsResult = await ipfsService.uploadInvoiceData(invoiceData);
-      
-      if (!ipfsResult.success || !ipfsResult.ipfsHash) {
-        throw new Error(ipfsResult.error || "Failed to upload to IPFS");
-      }
-
-      console.log("✅ executeBlockchainSave: IPFS upload successful", {
-        ipfsHash: ipfsResult.ipfsHash,
-      });
-
-      // Create invoice on blockchain
-      setToastMessage("Creating invoice on blockchain...");
-      setToastColor("warning");
-      setShowToast(true);
-
-      const result = await blockchainService.createInvoice({
-        amount: parseFloat(amount),
-        companyName: fileName,
-        companyAddress: "",
-        clientName: "",
-        clientAddress: "",
-        description: `Invoice for ${fileName}`,
-        items: [],
-        notes: `Created from spreadsheet: ${fileName}`,
-        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days from now
-      });
-
-      if (result.success && result.invoiceId) {
-        setToastMessage(
-          `Invoice #${result.invoiceId} created on blockchain! Tx: ${result.transactionHash?.slice(0, 10)}...`
-        );
-        setToastColor("success");
-        setShowToast(true);
-
-        console.log("✅ executeBlockchainSave: Blockchain invoice created", {
-          invoiceId: result.invoiceId,
-          transactionHash: result.transactionHash,
-        });
-      } else {
-        throw new Error(result.error || "Failed to create blockchain invoice");
-      }
-    } catch (error) {
-      console.error("❌ executeBlockchainSave: Error during blockchain save", error);
-      setToastMessage(`Failed to save to blockchain: ${error.message}`);
-      setToastColor("danger");
-      setShowToast(true);
-    }
-  };
-
   const activateFooter = (footer) => {
     console.log("🦶 activateFooter: Starting footer activation", { footer });
     // Only activate footer if SocialCalc is properly initialized
@@ -770,7 +626,7 @@ const Home: React.FC = () => {
       setAutoSaveTimer(newTimer);
     };
 
-    let removeListener = () => {};
+    let removeListener = () => { };
 
     // Wait for SocialCalc to be ready before setting up the listener
     const setupListener = () => {
@@ -977,8 +833,18 @@ const Home: React.FC = () => {
           >
             {/* Wallet Connection */}
             <div style={{ marginRight: "12px" }}>
-              {/* <WalletConnection /> */}
+              <WalletConnect />
             </div>
+            {/* Generate Invoice Button */}
+            <IonButton
+              fill="solid"
+              size="small"
+              color="success"
+              onClick={() => setShowCreateInvoiceModal(true)}
+              style={{ marginRight: "12px" }}
+            >
+              Generate Invoice
+            </IonButton>
             <IonIcon
               icon={textOutline}
               size="large"
@@ -993,17 +859,6 @@ const Home: React.FC = () => {
                 setShowMenu(true);
               }}
               style={{ cursor: "pointer", marginRight: "12px" }}
-            />
-            <IonIcon
-              icon={walletOutline}
-              size="large"
-              onClick={() => setShowWalletSelector(true)}
-              style={{ 
-                cursor: "pointer", 
-                marginRight: "12px",
-                color: isConnected ? "#2dd36f" : walletLoading ? "#ffc409" : "inherit"
-              }}
-              title={isConnected ? `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}` : "Connect Wallet"}
             />
             <IonIcon
               id="actions-trigger"
@@ -1240,57 +1095,6 @@ const Home: React.FC = () => {
           ]}
         />
 
-        {/* Blockchain Invoice Amount Prompt */}
-        <IonAlert
-          isOpen={showBlockchainAmountPrompt}
-          onDidDismiss={() => {
-            setShowBlockchainAmountPrompt(false);
-            setBlockchainInvoiceAmount("");
-          }}
-          header="Create Blockchain Invoice"
-          message="Enter the invoice amount (in PYUSD):"
-          inputs={[
-            {
-              name: "amount",
-              type: "number",
-              placeholder: "Enter amount in PYUSD...",
-              value: blockchainInvoiceAmount,
-              attributes: {
-                min: 0.01,
-                step: 0.01,
-              },
-            },
-          ]}
-          buttons={[
-            {
-              text: "Cancel",
-              role: "cancel",
-              handler: () => {
-                setBlockchainInvoiceAmount("");
-              },
-            },
-            {
-              text: "Create Invoice",
-              handler: (data) => {
-                if (data.amount && parseFloat(data.amount) > 0) {
-                  setBlockchainInvoiceAmount(data.amount);
-                  // Close dialog and execute blockchain save
-                  setShowBlockchainAmountPrompt(false);
-                  // Use setTimeout to ensure state updates
-                  setTimeout(async () => {
-                    await executeBlockchainSave(data.amount);
-                  }, 100);
-                } else {
-                  setToastMessage("Please enter a valid amount");
-                  setToastColor("warning");
-                  setShowToast(true);
-                  return false; // Prevent dialog from closing
-                }
-              },
-            },
-          ]}
-        />
-
         {/* File Options Popover */}
         <FileOptions
           showActionsPopover={showActionsPopover}
@@ -1298,7 +1102,6 @@ const Home: React.FC = () => {
           showColorModal={showColorModal}
           setShowColorPicker={setShowColorModal}
           onSave={handleSave}
-          onBlockchainSave={handleBlockchainSave}
           isAutoSaveEnabled={isAutoSaveEnabled}
           fileName={fileName}
         />
@@ -1392,8 +1195,8 @@ const Home: React.FC = () => {
                         border:
                           (colorMode === "background" &&
                             activeBackgroundColor === color.color) ||
-                          (colorMode === "font" &&
-                            activeFontColor === color.color)
+                            (colorMode === "font" &&
+                              activeFontColor === color.color)
                             ? "3px solid #3880ff"
                             : "2px solid #ccc",
                         cursor: "pointer",
@@ -1488,13 +1291,13 @@ const Home: React.FC = () => {
           </IonContent>
         </IonPopover>
 
-        <Menu showM={showMenu} setM={() => setShowMenu(false)} />
-
-        {/* Wallet Selector Modal */}
-        <WalletSelector 
-          isOpen={showWalletSelector}
-          onDidDismiss={() => setShowWalletSelector(false)}
+        {/* Create Invoice Modal */}
+        <CreateInvoiceModal
+          isOpen={showCreateInvoiceModal}
+          onClose={() => setShowCreateInvoiceModal(false)}
         />
+
+        <Menu showM={showMenu} setM={() => setShowMenu(false)} />
       </IonContent>
     </IonPage>
   );

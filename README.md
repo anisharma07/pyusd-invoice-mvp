@@ -220,4 +220,3 @@ For support, email the Contributor [anis42390@gmail.com] or create an issue in t
 ---
 
 **Made with ❤️ under C4GT DMP'25 Program**
-# pyusd-invoice-mvp

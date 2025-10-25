@@ -2,13 +2,16 @@ import { IonApp, IonRouterOutlet, setupIonicReact } from "@ionic/react";
 import { IonReactRouter } from "@ionic/react-router";
 import { Route, Redirect } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { config } from './config/wagmi';
 import Home from "./pages/Home";
 import FilesPage from "./pages/FilesPage";
 import SettingsPage from "./pages/SettingsPage";
 import LandingPage from "./pages/LandingPage";
+import Invoice from "./pages/Invoice";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { InvoiceProvider } from "./contexts/InvoiceContext";
-import { WalletProvider } from "./contexts/blockchain/WalletContext";
 import PWAUpdatePrompt from "./components/PWAUpdatePrompt";
 import OfflineIndicator from "./components/OfflineIndicator";
 import { usePWA } from "./hooks/usePWA";
@@ -34,6 +37,9 @@ import "./theme/variables.css";
 import "./App.css";
 
 setupIonicReact();
+
+// Create a client for React Query
+const queryClient = new QueryClient();
 
 const AppContent: React.FC = () => {
   const { isDarkMode } = useTheme();
@@ -61,9 +67,8 @@ const AppContent: React.FC = () => {
 
   return (
     <IonApp className={isDarkMode ? "dark-theme" : "light-theme"}>
-      <WalletProvider>
-        <InvoiceProvider>
-          <IonReactRouter>
+      <InvoiceProvider>
+        <IonReactRouter>
           <IonRouterOutlet>
             <Route exact path="/">
               {showLandingPage ? <LandingPage /> : <Redirect to="/app/files" />}
@@ -76,6 +81,12 @@ const AppContent: React.FC = () => {
                 </Route>
                 <Route exact path="/app/editor">
                   <Home />
+                </Route>
+                <Route exact path="/app/invoice/:fileName">
+                  <Invoice />
+                </Route>
+                <Route exact path="/app/invoice">
+                  <Invoice />
                 </Route>
                 <Route exact path="/app/files">
                   <FilesPage />
@@ -91,16 +102,19 @@ const AppContent: React.FC = () => {
           </IonRouterOutlet>
         </IonReactRouter>
         <PWAUpdatePrompt />
-        </InvoiceProvider>
-      </WalletProvider>
+      </InvoiceProvider>
     </IonApp>
   );
 };
 
 const App: React.FC = () => (
-  <ThemeProvider>
-    <AppContent />
-  </ThemeProvider>
+  <WagmiProvider config={config}>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AppContent />
+      </ThemeProvider>
+    </QueryClientProvider>
+  </WagmiProvider>
 );
 
 export default App;
