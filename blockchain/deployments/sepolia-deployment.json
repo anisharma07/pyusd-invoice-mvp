@@ -1,0 +1,13 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "contractAddress": "0xE1D6BFe21AD6e58Bd9aeFd5C4D23600F794F450C",
+  "pyusdAddress": "0xCaC524BcA292aaade2DF8A05cC58F0a65B1B3bB9",
+  "platformWallet": "0xe3FCcF5AFD68084a52eb67633d3ae0AA430E2221",
+  "deployer": "0xe3FCcF5AFD68084a52eb67633d3ae0AA430E2221",
+  "transactionHash": "0x5a121e102ba77a94bc5d61c8bcb4b0647b4bfd30f289379760a53f73a2a18f27",
+  "blockNumber": null,
+  "deployedAt": "2025-10-25T13:38:09.130Z",
+  "gasUsed": "2563875",
+  "gasCost": "0.000002563895511"
+}
